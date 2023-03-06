@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="IdUtils.fs" />
+    <Compile Include="Abstractions.fs" />
+    <Compile Include="SpanGenerators.fs" />
+    <Compile Include="Generators.fs" />
+  </ItemGroup>
+
+</Project>

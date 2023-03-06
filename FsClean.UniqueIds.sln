@@ -3,9 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.33414.496
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FsClean.UniqueIds", "FsClean.UniqueIds\FsClean.UniqueIds.fsproj", "{64EC6A89-D62B-4E0A-A8BD-E41773C8A93D}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FsClean.UniqueIds", "FsClean.UniqueIds\FsClean.UniqueIds.fsproj", "{64EC6A89-D62B-4E0A-A8BD-E41773C8A93D}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FsClean.UniqueIds.Samples", "FsClean.UniqueIds.Samples\FsClean.UniqueIds.Samples.fsproj", "{AFFD1AA4-915B-4E11-84FF-D135B62CCA3F}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FsClean.UniqueIds.Samples", "FsClean.UniqueIds.Samples\FsClean.UniqueIds.Samples.fsproj", "{AFFD1AA4-915B-4E11-84FF-D135B62CCA3F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{D417427A-119D-4D81-BD5C-F5934C980F92}"
+	ProjectSection(SolutionItems) = preProject
+		LICENSE.txt = LICENSE.txt
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

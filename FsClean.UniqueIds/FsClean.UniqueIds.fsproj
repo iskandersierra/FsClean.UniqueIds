@@ -21,6 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="SpanUtils.fs" />
     <Compile Include="IdUtils.fs" />
     <Compile Include="Abstractions.fs" />
     <Compile Include="SpanGenerators.fs" />

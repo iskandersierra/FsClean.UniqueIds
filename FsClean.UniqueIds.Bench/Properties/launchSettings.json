@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FsClean.UniqueIds.Bench": {
+      "commandName": "Project",
+      "commandLineArgs": "bench --name SpanUtilsASCII"
+    }
+  }
+}

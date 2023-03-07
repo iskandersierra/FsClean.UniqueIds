@@ -2,7 +2,7 @@
   "profiles": {
     "FsClean.UniqueIds.Bench": {
       "commandName": "Project",
-      "commandLineArgs": "bench --name SpanUtilsASCII"
+      "commandLineArgs": "profile --name SpanUtilsASCIIToChars --operation all --count 1000000"
     }
   }
 }

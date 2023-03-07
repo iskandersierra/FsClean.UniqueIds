@@ -12,29 +12,122 @@ open BenchmarkDotNet.Running
 open FsClean.UniqueIds.Bench
 
 let benchmarks =
-    ([ "SpanUtilsASCII", typeof<SpanUtilsASCII> ])
-        .ToDictionary(fst, snd, StringComparer.InvariantCultureIgnoreCase)
+    ([ typeof<SpanUtilsASCIIToChars>
+       typeof<SpanUtilsASCIIToString> ])
+        .ToDictionary((fun t -> t.Name), id, StringComparer.InvariantCultureIgnoreCase)
+
+let isBenchmarkMethod (method: MethodInfo) =
+    not (isNull (method.GetCustomAttribute<BenchmarkAttribute>(false)))
+
+let isBenchmarkType (t: Type) =
+    t.GetMethods(BindingFlags.Instance ||| BindingFlags.Public)
+    |> Seq.exists isBenchmarkMethod
+
+let getAllBenchmarkTypes (assembly: Assembly) =
+    assembly.ExportedTypes
+    |> Seq.filter isBenchmarkType
+    |> Seq.sortBy (fun t -> t.Name)
+
+let getAllOperations (benchType: Type) =
+    benchType.GetMethods()
+    |> Seq.filter isBenchmarkMethod
+    |> Seq.sortBy (fun m -> m.Name)
+
+let runProfilerOperation (benchType: Type) (operation: MethodInfo) size count seed =
+    printfn "Profiling operation: %s.%s" benchType.Name operation.Name
+
+    let instance = Activator.CreateInstance(benchType)
+
+    let setOptProp propName value =
+        let property = benchType.GetProperty(propName)
+        if value >= 0 && not (isNull property) && property.CanWrite then
+            property.SetValue(instance, [| value :> obj |])
+            |> ignore
+
+    setOptProp "Size" size
+    setOptProp "Count" count
+    setOptProp "Seed" seed
+
+    let setupMethod = benchType.GetMethod("Setup")
+
+    if not (isNull setupMethod) then
+        setupMethod.Invoke(instance, null) |> ignore
+
+    operation.Invoke(instance, null) |> ignore
+
+let runAllProfilerOperations benchType size count seed =
+    let operations = getAllOperations benchType
+
+    for operation in operations do
+        runProfilerOperation benchType operation size count seed
+
+let collectBenchmarkTypes names =
+    names
+    |> Seq.map (fun name ->
+        let found, t = benchmarks.TryGetValue(name)
+        name, found, t)
+    |> Seq.fold
+        (fun acc (name, found, type') ->
+            match acc, found with
+            | Ok types, true -> Ok(type' :: types)
+            | Ok _, false -> Error [ name ]
+            | Error names, false -> Error(name :: names)
+            | Error names, true -> Error names)
+        (Ok [])
+    |> Result.map (List.rev >> List.distinct >> List.toArray)
+    |> Result.mapError (List.rev >> List.distinct >> List.toArray)
+
+let collectBenchmarkOperations (benchType: Type) operations =
+    operations
+    |> Seq.map (fun operation ->
+        let method = benchType.GetMethod(operation)
+        operation, not(isNull method), method)
+    |> Seq.fold
+        (fun acc (name, found, method) ->
+            match acc, found with
+            | Ok methods, true -> Ok(method :: methods)
+            | Ok _, false -> Error [ name ]
+            | Error names, false -> Error(name :: names)
+            | Error names, true -> Error names)
+        (Ok [])
+    |> Result.map (List.rev >> List.distinct >> List.toArray)
+    |> Result.mapError (List.rev >> List.distinct >> List.toArray)
 
 let benchCommand =
-
     let command = Command("bench", "Run a benchmark set")
 
     let nameOption =
-        Option<string>("--name", "The name of the benchmark to run")
+        Option<string []>("--name", "The name of the benchmark to run. Can be set multiple times")
 
     nameOption.IsRequired <- true
+    nameOption.AddAlias "-n"
     command.AddOption(nameOption)
 
     command.SetHandler(
-        Action<_> (fun name ->
-            match benchmarks.TryGetValue(name) with
-            | true, benchType -> BenchmarkRunner.Run(benchType) |> ignore
-            | false, _ ->
-                match name with
-                | "list" ->
-                    let names = String.Join(", ", benchmarks.Keys)
-                    printfn "Available benchmarks: %s" names
-                | _ -> printfn "Unknown benchmark: %s" name),
+        Action<_> (fun names ->
+            match names with
+            | [| "list" |] ->
+                benchmarks.Keys
+                |> Seq.sort
+                |> String.concat ", "
+                |> printfn "Available benchmarks: all or %s"
+
+            | [| "all" |] ->
+                BenchmarkRunner.Run(Assembly.GetExecutingAssembly())
+                |> ignore
+
+            | _ ->
+                match collectBenchmarkTypes names with
+                | Ok [||] -> printfn "No benchmarks to run"
+                | Ok types -> BenchmarkRunner.Run(types = types) |> ignore
+                | Error [| name |] -> printfn "Unknown benchmark (use list): %s" name
+                | Error [||] -> invalidOp "Unreachable code detected"
+                | Error names ->
+                    names
+                    |> Seq.sort
+                    |> String.concat ", "
+                    |> printfn "Unknown benchmarks (use list): %s"
+        ),
         nameOption
     )
 
@@ -45,89 +138,92 @@ let profileCommand =
         Command("profile", "Run a profiling operation")
 
     let nameOption =
-        Option<string>("--name", "The name of the profile to run")
+        Option<string []>("--name", "The name of the benchmark to run. Can be set multiple times")
 
     nameOption.IsRequired <- true
+    nameOption.AddAlias "-n"
     command.AddOption(nameOption)
 
     let operationOption =
-        Option<string>("--operation", "The operation of the profile to run")
+        Option<string[]>("--operation", "The operation of the profile to run. Can be set multiple times")
 
-    nameOption.IsRequired <- true
+    operationOption.AddAlias "-o"
     command.AddOption(operationOption)
 
     let sizeOption =
         Option<int>("--size", (fun () -> -1), "The size of the profile to run")
 
+    sizeOption.AddAlias "-s"
     command.AddOption(sizeOption)
 
     let countOption =
         Option<int>("--count", (fun () -> -1), "The count of the profile to run")
 
+    countOption.AddAlias "-c"
     command.AddOption(countOption)
 
     let seedOption =
         Option<int>("--seed", (fun () -> -1), "The seed of the profile to run")
 
+    seedOption.AddAlias "-r"
     command.AddOption(seedOption)
 
     command.SetHandler(
-        (fun name operation size count seed ->
-            match benchmarks.TryGetValue(name) with
-            | true, benchType ->
-                if isNull operation || operation = "list" then
-                    let methods =
-                        benchType.GetMethods()
-                        |> Seq.filter (fun m ->
-                            let attr =
-                                m.GetCustomAttribute<BenchmarkAttribute>(false)
+        (fun names operations size count seed ->
+            match names with
+            | [| "list" |] ->
+                benchmarks.Keys
+                |> Seq.sort
+                |> String.concat ", "
+                |> printfn "Available profilers: all or %s"
 
-                            not (isNull attr))
-                        |> Seq.map (fun m -> m.Name)
+            | [| "all" |] ->
+                getAllBenchmarkTypes (Assembly.GetExecutingAssembly())
+                |> Seq.iter (fun profiler -> runAllProfilerOperations profiler size count seed)
 
-                    let names = methods |> String.concat ", "
-                    printfn "Available operations: %s" names
+            | names ->
+                match collectBenchmarkTypes names with
+                | Ok [||] -> printfn "No profilers to run"
+                | Ok [| profiler |] ->
+                    match operations with
+                    | [| "list" |] ->
+                        let operations = getAllOperations profiler
+                        let names = operations |> Seq.map (fun m -> m.Name) |> String.concat ", "
+                        printfn "Available operations: all or %s" names
 
-                else
-                    let method = benchType.GetMethod(operation)
+                    | [| "all" |] ->
+                        runAllProfilerOperations profiler size count seed
 
-                    if isNull method then
-                        printfn "Unknown operation: %s" name
-                    else
-                        printfn "Profiling operation: %s.%s" name operation
+                    | operations ->
+                        match collectBenchmarkOperations profiler operations with
+                        | Ok [||] -> printfn "No operations to run"
+                        | Ok operations ->
+                            for operation in operations do
+                                runProfilerOperation profiler operation size count seed
+                        | Error [| name |] -> printfn "Unknown profiler operation (use list): %s" name
+                        | Error [||] -> invalidOp "Unreachable code detected"
+                        | Error names ->
+                            names
+                            |> Seq.sort
+                            |> String.concat ", "
+                            |> printfn "Unknown profiler operations (use list): %s"
+                        
+                | Ok profilers ->
+                    match operations with
+                    | [||] ->
+                        for profiler in profilers do
+                            runAllProfilerOperations profiler size count seed
 
-                        let instance = Activator.CreateInstance(benchType)
-
-                        let setOptProp propName value =
-                            if value >= 0 then
-                                benchType.InvokeMember(
-                                    propName,
-                                    BindingFlags.SetProperty
-                                    ||| BindingFlags.Instance
-                                    ||| BindingFlags.Public,
-                                    Type.DefaultBinder,
-                                    instance,
-                                    [| value :> obj |]
-                                )
-                                |> ignore
-
-                        setOptProp "Size" size
-                        setOptProp "Count" count
-                        setOptProp "Seed" seed
-
-                        let setupMethod = benchType.GetMethod("Setup")
-
-                        if not (isNull setupMethod) then
-                            setupMethod.Invoke(instance, null) |> ignore
-
-                        method.Invoke(instance, null) |> ignore
-
-            | false, _ ->
-                match name with
-                | "list" ->
-                    let names = String.Join(", ", benchmarks.Keys)
-                    printfn "Available profilers: %s" names
-                | _ -> printfn "Unknown profiler: %s" name),
+                    | _ ->
+                        printfn "Cannot specify operations for multiple profilers"
+                | Error [| name |] -> printfn "Unknown profiler (use list): %s" name
+                | Error [||] -> invalidOp "Unreachable code detected"
+                | Error names ->
+                    names
+                    |> Seq.sort
+                    |> String.concat ", "
+                    |> printfn "Unknown profilers (use list): %s"
+        ),
         nameOption,
         operationOption,
         sizeOption,

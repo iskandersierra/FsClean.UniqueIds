@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="SpanUtilsTests.fs" />
     <Compile Include="SpanUtilsASCIITests.fs" />
+    <Compile Include="SpanUtilsHexTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

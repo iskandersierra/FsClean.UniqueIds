@@ -2,7 +2,7 @@
   "profiles": {
     "FsClean.UniqueIds.Bench": {
       "commandName": "Project",
-      "commandLineArgs": "profile --name SpanUtilsASCIIToChars --operation all --count 1000000"
+      "commandLineArgs": "profile --name SpanUtilsHexStandard -o LibToLowerChars -o SystemConvertToHexString --count 1000000"
     }
   }
 }

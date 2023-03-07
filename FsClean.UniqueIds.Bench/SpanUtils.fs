@@ -81,3 +81,46 @@ type SpanUtilsASCIIToString() =
 
         for _ = 1 to count do
             dummyString <- Encoding.ASCII.GetString(byteArray)
+
+[<MemoryDiagnoser>]
+type SpanUtilsHexStandard() =
+
+    let mutable byteArray = Array.empty
+    let mutable dummyString = ""
+
+    [<Params(1)>]
+    member val Seed = 1 with get, set
+
+    [<Params(256)>]
+    member val Size = 256 with get, set
+
+    [<Params(1_000_000)>]
+    member val Count = 1_000_000 with get, set
+
+    [<GlobalSetup>]
+    member this.Setup() =
+        let random = Random()
+        byteArray <- Array.init this.Size (fun _ -> byte (random.Next(0, 256)))
+
+    [<Benchmark(Baseline = true)>]
+    member this.LibToLowerChars() =
+        let charSpan = SpanUtils.stackAlloc<char> (this.Size * 2)
+        let bytesSpan = Span.op_Implicit (Span byteArray)
+        let count = this.Count
+
+        for _ = 1 to count do
+            SpanUtils.Hex.toLowerChars bytesSpan charSpan
+
+    [<Benchmark>]
+    member this.SystemConvertToHexString() =
+        let count = this.Count
+
+        for _ = 1 to count do
+            dummyString <- Convert.ToHexString(byteArray)
+
+    [<Benchmark>]
+    member this.SystemBitConverterToString() =
+        let count = this.Count
+
+        for _ = 1 to count do
+            dummyString <- BitConverter.ToString(byteArray).Replace("-", "")

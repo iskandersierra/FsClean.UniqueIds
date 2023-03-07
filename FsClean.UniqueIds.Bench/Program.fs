@@ -1,5 +1,6 @@
 ﻿open System
 open System.CommandLine
+open System.Diagnostics
 open System.Linq
 open System.Reflection
 open System.Threading
@@ -10,11 +11,6 @@ open BenchmarkDotNet.Attributes
 open BenchmarkDotNet.Running
 
 open FsClean.UniqueIds.Bench
-
-let benchmarks =
-    ([ typeof<SpanUtilsASCIIToChars>
-       typeof<SpanUtilsASCIIToString> ])
-        .ToDictionary((fun t -> t.Name), id, StringComparer.InvariantCultureIgnoreCase)
 
 let isBenchmarkMethod (method: MethodInfo) =
     not (isNull (method.GetCustomAttribute<BenchmarkAttribute>(false)))
@@ -41,7 +37,7 @@ let runProfilerOperation (benchType: Type) (operation: MethodInfo) size count se
     let setOptProp propName value =
         let property = benchType.GetProperty(propName)
         if value >= 0 && not (isNull property) && property.CanWrite then
-            property.SetValue(instance, [| value :> obj |])
+            property.SetValue(instance, value)
             |> ignore
 
     setOptProp "Size" size
@@ -53,13 +49,20 @@ let runProfilerOperation (benchType: Type) (operation: MethodInfo) size count se
     if not (isNull setupMethod) then
         setupMethod.Invoke(instance, null) |> ignore
 
+    let watch = Stopwatch.StartNew()
     operation.Invoke(instance, null) |> ignore
+    watch.Stop()
+    printfn "Elapsed: %O" watch.Elapsed
 
 let runAllProfilerOperations benchType size count seed =
     let operations = getAllOperations benchType
 
     for operation in operations do
         runProfilerOperation benchType operation size count seed
+
+let benchmarks =
+    (getAllBenchmarkTypes (Assembly.GetExecutingAssembly()))
+        .ToDictionary((fun t -> t.Name), id, StringComparer.InvariantCultureIgnoreCase)
 
 let collectBenchmarkTypes names =
     names

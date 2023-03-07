@@ -31,8 +31,7 @@ let ``getEncodedLength`` (sourceLength: int) (expected: int) =
 
         Assert.Equal(expected, actual)
 
-let sampleVocabulary =
-    [| 'a' .. 'p' |]
+let sampleVocabulary = [| 'a' .. 'p' |]
 
 let encodeFromVocabularyData () =
     seq {
@@ -41,8 +40,8 @@ let encodeFromVocabularyData () =
         yield
             [| 0uy .. 255uy |],
             [| for i = 0uy to 255uy do
-                'a' + char (i >>> 4)
-                'a' + char (i &&& 0x0Fuy) |]
+                   'a' + char (i >>> 4)
+                   'a' + char (i &&& 0x0Fuy) |]
     }
     |> Seq.map (fun (bytes, expected) -> [| bytes :> obj; expected |])
 
@@ -72,14 +71,10 @@ let toLowerBytesData () =
                    byte 'a' + i |]
 
         let bytes = genRandomBytes 1 100
-
         let expected =
-            BitConverter
-                .ToString(bytes)
-                .Replace("-", "")
-                .ToLower()
+            Convert.ToHexString(bytes).ToLower()
+            |> Encoding.ASCII.GetBytes
 
-        let expected = Encoding.ASCII.GetBytes(expected)
         yield bytes, expected
     }
     |> Seq.map (fun (bytes, expected) -> [| bytes :> obj; expected |])
@@ -124,11 +119,7 @@ let toUpperBytesData () =
 
         let bytes = genRandomBytes 1 100
 
-        let expected =
-            BitConverter
-                .ToString(bytes)
-                .Replace("-", "")
-
+        let expected = Convert.ToHexString(bytes)
         let expected = Encoding.ASCII.GetBytes(expected)
         yield bytes, expected
     }

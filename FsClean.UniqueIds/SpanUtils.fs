@@ -72,7 +72,6 @@ module Hex =
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be twice as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// </remarks>
     let encodeFromVocabulary<'t when 't: unmanaged>
@@ -80,16 +79,24 @@ module Hex =
         (source: ReadOnlySpan<byte>)
         (target: Span<'t>)
         =
-        let mutable j = 0
-        let last = source.Length - 1
+        if vocabulary.Length <> 16 then
+            invalidArg "vocabulary" "vocabulary must be 16 bytes long"
+        if source.Length <<< 1 <> target.Length then
+            invalidArg "source" "source must be half the length of target"
 
-        for i = 0 to last do
-            let b = source.[i]
-            let ch1 = vocabulary.[int (b >>> 4)]
-            let ch2 = vocabulary.[int (b &&& 0x0Fuy)]
-            target.[j] <- ch1
-            target.[j + 1] <- ch2
-            j <- j + 2
+        let last = source.Length - 1
+        let vocabularyPtr = &&vocabulary.GetPinnableReference()
+        let sourcePtr = &&source.GetPinnableReference()
+        let targetPtr = &&target.GetPinnableReference()
+
+        let mutable targetIndex = 0
+        for index = 0 to last do
+            let b = NativePtr.get sourcePtr index
+            NativePtr.get vocabularyPtr (int (b >>> 4))
+            |> NativePtr.set targetPtr targetIndex
+            NativePtr.get vocabularyPtr (int (b &&& 0x0Fuy))
+            |> NativePtr.set targetPtr (targetIndex + 1)
+            targetIndex <- targetIndex + 2
 
     let private LowerCaseChars =
         [| for ch = '0' to '9' do

@@ -118,7 +118,7 @@ type SpanUtilsHexStandard() =
         for _ = 1 to count do
             dummyString <- Convert.ToHexString(byteArray)
 
-    [<Benchmark>]
+    // [<Benchmark>]
     member this.SystemBitConverterToString() =
         let count = this.Count
 

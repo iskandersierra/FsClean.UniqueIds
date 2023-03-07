@@ -57,6 +57,36 @@ let ``encodeFromVocabulary`` (bytes: byte []) (expected: char []) =
     let actual = resultBytes.ToArray()
     Assert.Equal<char>(expected, actual)
 
+[<Fact>]
+let ``encodeFromVocabulary with shorter vocabulary`` () =
+    let vocabulary = [| 'a' .. 'o' |]
+    let bytes = [| 1uy .. 20uy |]
+    let hexSize = SpanUtils.Hex.getEncodedLength bytes.Length
+    Assert.Throws<ArgumentException> (fun () ->
+        let resultBytes = SpanUtils.stackAlloc<char> hexSize
+        SpanUtils.Hex.encodeFromVocabulary (ReadOnlySpan vocabulary) (ReadOnlySpan bytes) resultBytes
+        |> ignore) |> ignore
+
+[<Fact>]
+let ``encodeFromVocabulary with longer vocabulary`` () =
+    let vocabulary = [| 'a' .. 'q' |]
+    let bytes = [| 1uy .. 20uy |]
+    let hexSize = SpanUtils.Hex.getEncodedLength bytes.Length
+    Assert.Throws<ArgumentException> (fun () ->
+        let resultBytes = SpanUtils.stackAlloc<char> hexSize
+        SpanUtils.Hex.encodeFromVocabulary (ReadOnlySpan vocabulary) (ReadOnlySpan bytes) resultBytes
+        |> ignore) |> ignore
+
+[<Fact>]
+let ``encodeFromVocabulary with shorter target`` () =
+    let vocabulary = [| 'a' .. 'p' |]
+    let bytes = [| 1uy .. 20uy |]
+    let hexSize = SpanUtils.Hex.getEncodedLength bytes.Length - 1
+    Assert.Throws<ArgumentException> (fun () ->
+        let resultBytes = SpanUtils.stackAlloc<char> hexSize
+        SpanUtils.Hex.encodeFromVocabulary (ReadOnlySpan vocabulary) (ReadOnlySpan bytes) resultBytes
+        |> ignore) |> ignore
+
 let toLowerBytesData () =
     seq {
         yield [||], [||]

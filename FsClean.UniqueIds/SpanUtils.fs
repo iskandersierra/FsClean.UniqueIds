@@ -47,8 +47,7 @@ module ASCII =
     /// <remarks>
     /// This function is intended to be performant, so it does not validate the input.
     /// </remarks>
-    let inline toString (source: ReadOnlySpan<byte>) =
-        Encoding.ASCII.GetString(source)
+    let inline toString (source: ReadOnlySpan<byte>) = Encoding.ASCII.GetString(source)
 
 [<RequireQualifiedAccess>]
 module Hex =
@@ -81,8 +80,9 @@ module Hex =
         =
         if vocabulary.Length <> 16 then
             invalidArg "vocabulary" "vocabulary must be 16 bytes long"
-        if source.Length <<< 1 <> target.Length then
-            invalidArg "source" "source must be half the length of target"
+
+        if source.Length <<< 1 > target.Length then
+            invalidArg "target" "target must be at least twice as long as source"
 
         let last = source.Length - 1
         let vocabularyPtr = &&vocabulary.GetPinnableReference()
@@ -90,12 +90,16 @@ module Hex =
         let targetPtr = &&target.GetPinnableReference()
 
         let mutable targetIndex = 0
+
         for index = 0 to last do
             let b = NativePtr.get sourcePtr index
+
             NativePtr.get vocabularyPtr (int (b >>> 4))
             |> NativePtr.set targetPtr targetIndex
+
             NativePtr.get vocabularyPtr (int (b &&& 0x0Fuy))
             |> NativePtr.set targetPtr (targetIndex + 1)
+
             targetIndex <- targetIndex + 2
 
     let private LowerCaseChars =
@@ -179,8 +183,11 @@ module Base64 =
     let getEncodedLength (sourceLength: int) =
         if sourceLength < 0 then
             invalidArg "size" "size must not be less than zero"
-        else
-            (sourceLength + 2) / 3 * 4
+
+        let extra = sourceLength % 3
+        let extra = extra + sign extra
+
+        (sourceLength / 3) * 4 + extra
 
     /// <summary>
     /// Encodes a span of bytes to a span of base 64 ascii characters, also as bytes.
@@ -189,7 +196,6 @@ module Base64 =
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// For the same reason, the target span is not padded with '=' characters.
     /// </remarks>
@@ -199,81 +205,70 @@ module Base64 =
         (source: ReadOnlySpan<byte>)
         (target: Span<'t>)
         =
-        let lastWholeStep = source.Length / 3 - 1
+        let sourceLength = source.Length
 
-        for step = 0 to lastWholeStep do
-            let fromPos = step * 3
-            let pos = step <<< 2
+        if vocabulary.Length <> 64 then
+            invalidArg "vocabulary" "vocabulary must be 64 bytes long"
 
+        if target.Length < getEncodedLength sourceLength then
+            invalidArg "target" $"target must be at least {getEncodedLength sourceLength} bytes long"
+
+        let lastWholeStep = sourceLength / 3 - 1
+
+        let mutable fromPos = 0
+        let mutable pos = 0
+
+        for _ = 0 to lastWholeStep do
             let b1 = source.[fromPos]
             let b2 = source.[fromPos + 1]
             let b3 = source.[fromPos + 2]
 
-            let ch1 = vocabulary.[int (b1 >>> 2)]
+            target.[pos] <- vocabulary.[int (b1 >>> 2)]
+            target.[pos + 1] <- vocabulary.[int (((b1 &&& 0x03uy) <<< 4) ||| (b2 >>> 4))]
+            target.[pos + 2] <- vocabulary.[int (((b2 &&& 0x0Fuy) <<< 2) ||| (b3 >>> 6))]
+            target.[pos + 3] <- vocabulary.[int (b3 &&& 0x3Fuy)]
 
-            let ch2 =
-                vocabulary.[int (((b1 &&& 0x03uy) <<< 4) ||| (b2 >>> 4))]
+            fromPos <- fromPos + 3
+            pos <- pos + 4
 
-            let ch3 =
-                vocabulary.[int (((b2 &&& 0x0Fuy) <<< 2) ||| (b3 >>> 6))]
-
-            let ch4 = vocabulary.[int (b3 &&& 0x3Fuy)]
-
-            target.[pos] <- ch1
-            target.[pos + 1] <- ch2
-            target.[pos + 2] <- ch3
-            target.[pos + 3] <- ch4
-
-        let remaining = source.Length - (lastWholeStep + 1) * 3
+        let remaining = sourceLength - fromPos
 
         if remaining = 1 then
-            let fromPos = (lastWholeStep + 1) * 3
-            let pos = (lastWholeStep + 1) <<< 2
-
             let b1 = source.[fromPos]
 
-            let ch1 = vocabulary.[int (b1 >>> 2)]
-            let ch2 = vocabulary.[int ((b1 &&& 0x03uy) <<< 4)]
+            target.[pos] <- vocabulary.[int (b1 >>> 2)]
+            target.[pos + 1] <- vocabulary.[int ((b1 &&& 0x03uy) <<< 4)]
 
-            target.[pos] <- ch1
-            target.[pos + 1] <- ch2
         elif remaining = 2 then
-            let fromPos = (lastWholeStep + 1) * 3
-            let pos = (lastWholeStep + 1) <<< 2
-
             let b1 = source.[fromPos]
             let b2 = source.[fromPos + 1]
 
-            let ch1 = vocabulary.[int (b1 >>> 2)]
+            target.[pos] <- vocabulary.[int (b1 >>> 2)]
+            target.[pos + 1] <- vocabulary.[int (((b1 &&& 0x03uy) <<< 4) ||| (b2 >>> 4))]
+            target.[pos + 2] <- vocabulary.[int ((b2 &&& 0x0Fuy) <<< 2)]
 
-            let ch2 =
-                vocabulary.[int (((b1 &&& 0x03uy) <<< 4) ||| (b2 >>> 4))]
-
-            let ch3 = vocabulary.[int ((b2 &&& 0x0Fuy) <<< 2)]
-
-            target.[pos] <- ch1
-            target.[pos + 1] <- ch2
-            target.[pos + 2] <- ch3
-
-    let private StandardChars =
+    let private SafeChars =
         [| for ch = 'A' to 'Z' do
             yield ch
            for ch = 'a' to 'z' do
                yield ch
            for ch = '0' to '9' do
-               yield ch
+               yield ch |]
+
+    let private StandardChars =
+        [| yield! SafeChars
            yield '+'
            yield '/' |]
 
     let private UrlSafeChars =
-        [| for ch = 'A' to 'Z' do
-            yield ch
-           for ch = 'a' to 'z' do
-               yield ch
-           for ch = '0' to '9' do
-               yield ch
+        [| yield! SafeChars
            yield '-'
            yield '_' |]
+
+    let private IdentifierSafeChars =
+        [| yield! SafeChars
+           yield 'A'
+           yield 'a' |]
 
     let private StandardBytes =
         [| for ch in StandardChars do
@@ -281,6 +276,10 @@ module Base64 =
 
     let private UrlSafeBytes =
         [| for ch in UrlSafeChars do
+               yield byte ch |]
+
+    let private IdentifierSafeBytes =
+        [| for ch in IdentifierSafeChars do
                yield byte ch |]
 
     /// <summary>
@@ -341,4 +340,34 @@ module Base64 =
     /// </remarks>
     let toUrlSafeChars (source: ReadOnlySpan<byte>) (target: Span<char>) =
         let vocabulary = ReadOnlySpan<_>(UrlSafeChars)
+        encodeFromVocabulary vocabulary source target
+
+    /// <summary>
+    /// Encodes a span of bytes to a span of URL-safe base 64 ascii characters, also as bytes.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
+    /// <remarks>
+    /// This function is intended to be performant, so it does not validate the input.
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toIdentifierSafeBytes (source: ReadOnlySpan<byte>) (target: Span<byte>) =
+        let vocabulary = ReadOnlySpan<_>(IdentifierSafeBytes)
+        encodeFromVocabulary vocabulary source target
+
+    /// <summary>
+    /// Encodes a span of bytes to a span of URL-safe base 64 ascii characters.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
+    /// <remarks>
+    /// This function is intended to be performant, so it does not validate the input.
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toIdentifierSafeChars (source: ReadOnlySpan<byte>) (target: Span<char>) =
+        let vocabulary = ReadOnlySpan<_>(IdentifierSafeChars)
         encodeFromVocabulary vocabulary source target

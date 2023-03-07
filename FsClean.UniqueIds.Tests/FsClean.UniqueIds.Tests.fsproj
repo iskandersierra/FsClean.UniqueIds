@@ -11,6 +11,7 @@
     <Compile Include="SpanUtilsTests.fs" />
     <Compile Include="SpanUtilsASCIITests.fs" />
     <Compile Include="SpanUtilsHexTests.fs" />
+    <Compile Include="SpanUtilsBase64Tests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

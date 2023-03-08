@@ -12,6 +12,10 @@
     <Compile Include="SpanUtilsASCIITests.fs" />
     <Compile Include="SpanUtilsHexTests.fs" />
     <Compile Include="SpanUtilsBase64Tests.fs" />
+    <Compile Include="SpanUtilsSesionCounterTests.fs" />
+    <Compile Include="SpanUtilsTimestampTests.fs" />
+    <Compile Include="SpanUtilsRandomTests.fs" />
+    <Compile Include="SpanUtilsProcessFingerprintTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

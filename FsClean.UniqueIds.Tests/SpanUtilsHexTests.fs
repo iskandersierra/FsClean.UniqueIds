@@ -3,7 +3,6 @@ module SpanUtilsHexTests
 open System
 open System.Text
 
-open Swensen.Unquote
 open Xunit
 
 open FsClean.UniqueIds
@@ -87,6 +86,18 @@ let ``encodeFromVocabulary with shorter target`` () =
         SpanUtils.Hex.encodeFromVocabulary (ReadOnlySpan vocabulary) (ReadOnlySpan bytes) resultBytes
         |> ignore) |> ignore
 
+[<Theory>]
+[<MemberData(nameof (encodeFromVocabularyData))>]
+let ``toArrayFromVocabulary`` (bytes: byte []) (expected: char []) =
+    let actual = SpanUtils.Hex.toArrayFromVocabulary (ReadOnlySpan sampleVocabulary) (ReadOnlySpan bytes)
+    Assert.Equal<char>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (encodeFromVocabularyData))>]
+let ``toStringFromVocabulary`` (bytes: byte []) (expected: char []) =
+    let actual = SpanUtils.Hex.toStringFromVocabulary (ReadOnlySpan sampleVocabulary) (ReadOnlySpan bytes)
+    Assert.Equal<char>(expected, actual)
+
 let toLowerBytesData () =
     seq {
         yield [||], [||]
@@ -134,6 +145,19 @@ let ``toLowerChars`` (bytes: byte []) (expected: byte []) =
     let expected = expected |> Array.map char
     Assert.Equal<char>(expected, actual)
 
+[<Theory>]
+[<MemberData(nameof (toLowerBytesData))>]
+let ``toLowerArray`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Hex.toLowerArray (ReadOnlySpan bytes)
+    Assert.Equal<byte>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toLowerBytesData))>]
+let ``toLowerString`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Hex.toLowerString (ReadOnlySpan bytes)
+    let expected = expected |> Array.map char
+    Assert.Equal<char>(expected, actual)
+
 let toUpperBytesData () =
     seq {
         yield [||], [||]
@@ -177,5 +201,18 @@ let ``toUpperChars`` (bytes: byte []) (expected: byte []) =
 
     SpanUtils.Hex.toUpperChars (ReadOnlySpan bytes) resultChars
     let actual = resultChars.ToArray()
+    let expected = expected |> Array.map char
+    Assert.Equal<char>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toUpperBytesData))>]
+let ``toUpperArray`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Hex.toUpperArray (ReadOnlySpan bytes)
+    Assert.Equal<byte>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toUpperBytesData))>]
+let ``toUpperString`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Hex.toUpperString (ReadOnlySpan bytes)
     let expected = expected |> Array.map char
     Assert.Equal<char>(expected, actual)

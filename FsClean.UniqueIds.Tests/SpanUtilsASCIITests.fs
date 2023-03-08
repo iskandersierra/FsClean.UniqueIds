@@ -14,7 +14,7 @@ let ``toChars`` () =
     for i = 1 to 128 do
         span.[i - 1] <- byte i
     let chars = SpanUtils.stackAlloc<char> 128
-    SpanUtils.ASCII.toChars (Span.op_Implicit span) chars
+    SpanUtils.ASCII.toChars span chars
     let actual = String(chars)
     let expected = Encoding.ASCII.GetString(span)
     test <@ actual = expected @>
@@ -24,7 +24,6 @@ let ``toString`` () =
     let span = SpanUtils.stackAlloc<byte> 128
     for i = 1 to 128 do
         span.[i - 1] <- byte i
-    let actual = SpanUtils.ASCII.toString (Span.op_Implicit span)
+    let actual = SpanUtils.ASCII.toString span
     let expected = Encoding.ASCII.GetString(span)
     test <@ actual = expected @>
-    

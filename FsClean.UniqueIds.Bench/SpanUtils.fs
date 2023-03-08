@@ -7,6 +7,10 @@ open BenchmarkDotNet.Attributes
 
 open FsClean.UniqueIds
 
+#nowarn "9"
+#nowarn "51"
+#nowarn "3391"
+
 [<MemoryDiagnoser>]
 type SpanUtilsASCIIToChars() =
 
@@ -30,7 +34,7 @@ type SpanUtilsASCIIToChars() =
     [<Benchmark(Baseline = true)>]
     member this.LibToChar() =
         let charSpan = SpanUtils.stackAlloc<char> this.Size
-        let bytesSpan = Span.op_Implicit (Span byteArray)
+        let bytesSpan = byteArray.AsSpan()
         let count = this.Count
 
         for _ = 1 to count do
@@ -69,7 +73,7 @@ type SpanUtilsASCIIToString() =
 
     [<Benchmark(Baseline = true)>]
     member this.LibToString() =
-        let bytesSpan = Span.op_Implicit(Span byteArray)
+        let bytesSpan = byteArray.AsSpan()
         let count = this.Count
 
         for _ = 1 to count do
@@ -105,7 +109,7 @@ type SpanUtilsHexStandard() =
     [<Benchmark(Baseline = true)>]
     member this.LibToLowerChars() =
         let charSpan = SpanUtils.stackAlloc<char> (this.Size * 2)
-        let bytesSpan = Span.op_Implicit (Span byteArray)
+        let bytesSpan = byteArray.AsSpan()
         let count = this.Count
 
         for _ = 1 to count do
@@ -148,7 +152,7 @@ type SpanUtilsBase64Standard() =
     [<Benchmark(Baseline = true)>]
     member this.LibToLowerChars() =
         let charSpan = SpanUtils.stackAlloc<char> (this.Size * 2)
-        let bytesSpan = Span.op_Implicit (Span byteArray)
+        let bytesSpan = byteArray.AsSpan()
         let count = this.Count
 
         for _ = 1 to count do

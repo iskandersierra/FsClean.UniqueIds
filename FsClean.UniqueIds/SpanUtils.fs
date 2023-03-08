@@ -2,6 +2,7 @@
 module FsClean.UniqueIds.SpanUtils
 
 open System
+open System.Buffers.Binary
 open System.Security.Cryptography
 open System.Text
 open System.Threading
@@ -9,6 +10,8 @@ open System.Threading
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
+#nowarn "51"
+#nowarn "3391"
 
 /// <summary>
 /// Allocates a stack-allocated span of values of given type.
@@ -25,6 +28,34 @@ let inline stackAlloc<'t when 't: unmanaged> (size: int) =
     let nativePtr = NativePtr.toVoidPtr nativeBytes
     let bytesSpan = Span<'t>(nativePtr, size)
     bytesSpan
+
+let copyPadLeft<'t when 't: unmanaged> (paddingValue: 't) (source: ReadOnlySpan<'t>) (target: Span<'t>) =
+    let sourceLength = source.Length
+    let targetLength = target.Length
+
+    if sourceLength >= targetLength then
+        source
+            .Slice(sourceLength - targetLength)
+            .CopyTo(target)
+    else
+        let paddingLength = targetLength - sourceLength
+        target.Slice(0, paddingLength).Fill paddingValue
+        source.CopyTo(target.Slice(paddingLength))
+
+let copyPadRight<'t when 't: unmanaged> (paddingValue: 't) (source: ReadOnlySpan<'t>) (target: Span<'t>) =
+    let sourceLength = source.Length
+    let targetLength = target.Length
+
+    if sourceLength >= targetLength then
+        source.Slice(0, targetLength).CopyTo(target)
+    else
+        source.CopyTo(target.Slice(0, sourceLength))
+        target.Slice(sourceLength).Fill paddingValue
+
+let writeInt64Bytes (value: int64) (span: Span<byte>) =
+    let bytesSpan = stackAlloc<byte> 8
+    BinaryPrimitives.WriteInt64BigEndian(bytesSpan, value)
+    copyPadLeft<byte> 0uy (bytesSpan) span
 
 [<RequireQualifiedAccess>]
 module ASCII =
@@ -102,6 +133,34 @@ module Hex =
 
             targetIndex <- targetIndex + 2
 
+    /// <summary>
+    /// Encodes a span of bytes to an array of HEX ascii characters.
+    /// </summary>
+    /// <param name="vocabulary">The vocabulary to use for encoding. MUST be 16 bytes long.</param>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// </remarks>
+    let toArrayFromVocabulary<'t when 't: unmanaged> (vocabulary: ReadOnlySpan<'t>) (source: ReadOnlySpan<byte>) =
+        let targetLength = getEncodedLength source.Length
+        let target = stackAlloc<'t> targetLength
+        encodeFromVocabulary vocabulary source target
+        target.ToArray()
+
+    /// <summary>
+    /// Encodes a span of bytes to a string of HEX ascii characters.
+    /// </summary>
+    /// <param name="vocabulary">The vocabulary to use for encoding. MUST be 16 bytes long.</param>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// </remarks>
+    let toStringFromVocabulary (vocabulary: ReadOnlySpan<char>) (source: ReadOnlySpan<byte>) =
+        let targetLength = getEncodedLength source.Length
+        let target = stackAlloc<char> targetLength
+        encodeFromVocabulary vocabulary source target
+        String(target)
+
     let private LowerCaseChars =
         [| for ch = '0' to '9' do
             yield ch
@@ -127,9 +186,6 @@ module Hex =
     /// </summary>
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be twice as long as the source.</param>
-    /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
-    /// </remarks>
     let toLowerBytes (source: ReadOnlySpan<byte>) (target: Span<byte>) =
         let vocabulary = ReadOnlySpan<_>(LowerCaseBytes)
         encodeFromVocabulary vocabulary source target
@@ -139,9 +195,6 @@ module Hex =
     /// </summary>
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be twice as long as the source.</param>
-    /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
-    /// </remarks>
     let toUpperBytes (source: ReadOnlySpan<byte>) (target: Span<byte>) =
         let vocabulary = ReadOnlySpan<_>(UpperCaseBytes)
         encodeFromVocabulary vocabulary source target
@@ -151,9 +204,6 @@ module Hex =
     /// </summary>
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of chars to encode to. MUST be twice as long as the source.</param>
-    /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
-    /// </remarks>
     let toLowerChars (source: ReadOnlySpan<byte>) (target: Span<char>) =
         let vocabulary = ReadOnlySpan<_>(LowerCaseChars)
         encodeFromVocabulary vocabulary source target
@@ -163,12 +213,42 @@ module Hex =
     /// </summary>
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of chars to encode to. MUST be twice as long as the source.</param>
-    /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
-    /// </remarks>
     let toUpperChars (source: ReadOnlySpan<byte>) (target: Span<char>) =
         let vocabulary = ReadOnlySpan<_>(UpperCaseChars)
         encodeFromVocabulary vocabulary source target
+
+    /// <summary>
+    /// Encodes a span of bytes to an array of lower-case HEX ascii characters, also as bytes.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <param name="target">The target span of bytes to encode to. MUST be twice as long as the source.</param>
+    let toLowerArray (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(LowerCaseBytes)
+        toArrayFromVocabulary vocabulary source
+
+    /// <summary>
+    /// Encodes a span of bytes to an array of upper-case HEX ascii characters, also as bytes.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    let toUpperArray (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(UpperCaseBytes)
+        toArrayFromVocabulary vocabulary source
+
+    /// <summary>
+    /// Encodes a span of bytes to a string of lower-case HEX ascii characters.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    let toLowerString (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(LowerCaseChars)
+        toStringFromVocabulary vocabulary source
+
+    /// <summary>
+    /// Encodes a span of bytes to a string of upper-case HEX ascii characters.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    let toUpperString (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(UpperCaseChars)
+        toStringFromVocabulary vocabulary source
 
 [<RequireQualifiedAccess>]
 module Base64 =
@@ -247,6 +327,38 @@ module Base64 =
             target.[pos + 1] <- vocabulary.[int (((b1 &&& 0x03uy) <<< 4) ||| (b2 >>> 4))]
             target.[pos + 2] <- vocabulary.[int ((b2 &&& 0x0Fuy) <<< 2)]
 
+    /// <summary>
+    /// Encodes a span of bytes to an array of base 64 ascii characters, also as bytes.
+    /// </summary>
+    /// <param name="vocabulary">The vocabulary to use for encoding. MUST be 64 bytes long.</param>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// </remarks>
+    /// <see href="https://en.wikipedia.org/wiki/Base64"/>
+    let toArrayFromVocabulary<'t when 't: unmanaged> (vocabulary: ReadOnlySpan<'t>) (source: ReadOnlySpan<byte>) =
+        let targetLength = getEncodedLength source.Length
+        let target = stackAlloc<'t> targetLength
+        encodeFromVocabulary vocabulary source target
+        target.ToArray()
+
+    /// <summary>
+    /// Encodes a span of bytes to a string of base 64 ascii characters.
+    /// </summary>
+    /// <param name="vocabulary">The vocabulary to use for encoding. MUST be 64 bytes long.</param>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// </remarks>
+    /// <see href="https://en.wikipedia.org/wiki/Base64"/>
+    let toStringFromVocabulary (vocabulary: ReadOnlySpan<char>) (source: ReadOnlySpan<byte>) =
+        let targetLength = getEncodedLength source.Length
+        let target = stackAlloc<char> targetLength
+        encodeFromVocabulary vocabulary source target
+        target.ToArray()
+
     let private SafeChars =
         [| for ch = 'A' to 'Z' do
             yield ch
@@ -288,7 +400,6 @@ module Base64 =
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// For the same reason, the target span is not padded with '=' characters.
     /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
@@ -303,7 +414,6 @@ module Base64 =
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// For the same reason, the target span is not padded with '=' characters.
     /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
@@ -313,12 +423,37 @@ module Base64 =
         encodeFromVocabulary vocabulary source target
 
     /// <summary>
+    /// Encodes a span of bytes to an array of standard base 64 ascii characters, also as bytes.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toStandardArray (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(StandardBytes)
+        toArrayFromVocabulary vocabulary source
+
+    /// <summary>
+    /// Encodes a span of bytes to a string of standard base 64 ascii characters.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toStandardString (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(StandardChars)
+        toStringFromVocabulary vocabulary source
+
+    /// <summary>
     /// Encodes a span of bytes to a span of URL-safe base 64 ascii characters, also as bytes.
     /// </summary>
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// For the same reason, the target span is not padded with '=' characters.
     /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
@@ -333,7 +468,6 @@ module Base64 =
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// For the same reason, the target span is not padded with '=' characters.
     /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
@@ -343,12 +477,37 @@ module Base64 =
         encodeFromVocabulary vocabulary source target
 
     /// <summary>
+    /// Encodes a span of bytes to an array of URL-safe base 64 ascii characters, also as bytes.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toUrlSafeArray (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(UrlSafeBytes)
+        toArrayFromVocabulary vocabulary source
+
+    /// <summary>
+    /// Encodes a span of bytes to a string of URL-safe base 64 ascii characters.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toUrlSafeString (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(UrlSafeChars)
+        toStringFromVocabulary vocabulary source
+
+    /// <summary>
     /// Encodes a span of bytes to a span of URL-safe base 64 ascii characters, also as bytes.
     /// </summary>
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// For the same reason, the target span is not padded with '=' characters.
     /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
@@ -363,7 +522,6 @@ module Base64 =
     /// <param name="source">The source span of bytes to encode.</param>
     /// <param name="target">The target span of bytes to encode to. MUST be 4/3 times as long as the source.</param>
     /// <remarks>
-    /// This function is intended to be performant, so it does not validate the input.
     /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
     /// For the same reason, the target span is not padded with '=' characters.
     /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
@@ -371,3 +529,85 @@ module Base64 =
     let toIdentifierSafeChars (source: ReadOnlySpan<byte>) (target: Span<char>) =
         let vocabulary = ReadOnlySpan<_>(IdentifierSafeChars)
         encodeFromVocabulary vocabulary source target
+
+    /// <summary>
+    /// Encodes a span of bytes to an array of URL-safe base 64 ascii characters, also as bytes.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toIdentifierSafeArray (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(IdentifierSafeBytes)
+        toArrayFromVocabulary vocabulary source
+
+    /// <summary>
+    /// Encodes a span of bytes to a string of URL-safe base 64 ascii characters.
+    /// </summary>
+    /// <param name="source">The source span of bytes to encode.</param>
+    /// <remarks>
+    /// Because it is intended to produce IDs, the vocabulary is not checked for uniqueness.
+    /// For the same reason, the target span is not padded with '=' characters.
+    /// Use <see cref="getEncodedLength"/> to compute the length of the target span.
+    /// </remarks>
+    let toIdentifierSafeString (source: ReadOnlySpan<byte>) =
+        let vocabulary = ReadOnlySpan<_>(IdentifierSafeChars)
+        toStringFromVocabulary vocabulary source
+
+[<RequireQualifiedAccess>]
+module SessionCounter =
+    let mutable private counter = -1L
+
+    let getValue () = Interlocked.Increment(&counter)
+
+    let resetValue () =
+        Interlocked.Exchange(&counter, -1L) |> ignore
+
+    let inline writeBytes (span: Span<byte>) = writeInt64Bytes (getValue ()) span
+
+[<RequireQualifiedAccess>]
+module Timestamp =
+    let inline getValue () =
+        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+
+    let inline writeBytes (span: Span<byte>) = writeInt64Bytes (getValue ()) span
+
+[<RequireQualifiedAccess>]
+module Random =
+    let inline writeBytes (span: Span<byte>) = RandomNumberGenerator.Fill span
+
+[<RequireQualifiedAccess>]
+module ProcessFingerprint =
+    let createHostFingerprint () =
+        let hostName =
+            try
+                Environment.MachineName
+            with
+            | _ -> ""
+
+        let hostName =
+            if hostName = "" then
+                let bytes = stackAlloc<byte> 6
+                Random.writeBytes bytes
+                Hex.toLowerString bytes
+            else
+                hostName
+
+        hostName.GetHashCode()
+
+    let createProcessFingerprint () = Environment.ProcessId
+
+    let createFingerprint () =
+        let hash = HashCode()
+        hash.Add(createHostFingerprint ())
+        hash.Add(createProcessFingerprint ())
+        hash.ToHashCode()
+
+    let private fingerprint = createFingerprint ()
+
+    let getValue () = fingerprint
+
+    let inline writeBytes (span: Span<byte>) =
+        writeInt64Bytes (getValue ()) span

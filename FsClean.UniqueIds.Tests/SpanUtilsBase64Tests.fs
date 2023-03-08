@@ -1,9 +1,7 @@
 module SpanUtilsBase64Tests
 
 open System
-open System.Text
 
-open Swensen.Unquote
 open Xunit
 
 open FsClean.UniqueIds
@@ -104,6 +102,18 @@ let ``encodeFromVocabulary with shorter target`` () =
         |> ignore)
     |> ignore
 
+[<Theory>]
+[<MemberData(nameof (encodeFromVocabularyData))>]
+let ``toArrayFromVocabulary`` (bytes: byte []) (expected: char []) =
+    let actual = SpanUtils.Base64.toArrayFromVocabulary (ReadOnlySpan sampleVocabulary) (ReadOnlySpan bytes)
+    Assert.Equal<char>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (encodeFromVocabularyData))>]
+let ``toStringFromVocabulary`` (bytes: byte []) (expected: char []) =
+    let actual = SpanUtils.Base64.toStringFromVocabulary (ReadOnlySpan sampleVocabulary) (ReadOnlySpan bytes)
+    Assert.Equal<char>(expected, actual)
+
 let toStandardBytesData () =
     seq {
         yield [||], [||]
@@ -139,6 +149,19 @@ let ``toStandardChars`` (bytes: byte []) (expected: byte []) =
 
     SpanUtils.Base64.toStandardChars (ReadOnlySpan bytes) resultChars
     let actual = resultChars.ToArray()
+    let expected = expected |> Array.map char
+    Assert.Equal<char>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toStandardBytesData))>]
+let ``toStandardArray`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Base64.toStandardArray (ReadOnlySpan bytes)
+    Assert.Equal<byte>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toStandardBytesData))>]
+let ``toStandardString`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Base64.toStandardString (ReadOnlySpan bytes)
     let expected = expected |> Array.map char
     Assert.Equal<char>(expected, actual)
 
@@ -180,6 +203,19 @@ let ``toUrlSafeChars`` (bytes: byte []) (expected: byte []) =
     let expected = expected |> Array.map char
     Assert.Equal<char>(expected, actual)
 
+[<Theory>]
+[<MemberData(nameof (toUrlSafeBytesData))>]
+let ``toUrlSafeArray`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Base64.toUrlSafeArray (ReadOnlySpan bytes)
+    Assert.Equal<byte>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toUrlSafeBytesData))>]
+let ``toUrlSafeString`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Base64.toUrlSafeString (ReadOnlySpan bytes)
+    let expected = expected |> Array.map char
+    Assert.Equal<char>(expected, actual)
+
 let toIdentifierSafeBytesData () =
     seq {
         yield [||], [||]
@@ -215,5 +251,18 @@ let ``toIdentifierSafeChars`` (bytes: byte []) (expected: byte []) =
 
     SpanUtils.Base64.toIdentifierSafeChars (ReadOnlySpan bytes) resultChars
     let actual = resultChars.ToArray()
+    let expected = expected |> Array.map char
+    Assert.Equal<char>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toIdentifierSafeBytesData))>]
+let ``toIdentifierSafeArray`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Base64.toIdentifierSafeArray (ReadOnlySpan bytes)
+    Assert.Equal<byte>(expected, actual)
+
+[<Theory>]
+[<MemberData(nameof (toIdentifierSafeBytesData))>]
+let ``toIdentifierSafeString`` (bytes: byte []) (expected: byte []) =
+    let actual = SpanUtils.Base64.toIdentifierSafeString (ReadOnlySpan bytes)
     let expected = expected |> Array.map char
     Assert.Equal<char>(expected, actual)

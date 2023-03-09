@@ -8,6 +8,10 @@ open Xunit
 
 open FsClean.UniqueIds
 
+#nowarn "9"
+#nowarn "51"
+#nowarn "3391"
+
 [<Fact>]
 let ``toChars`` () =
     let span = SpanUtils.stackAlloc<byte> 128

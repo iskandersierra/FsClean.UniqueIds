@@ -22,10 +22,8 @@
 
   <ItemGroup>
     <Compile Include="SpanUtils.fs" />
-    <Compile Include="IdUtils.fs" />
     <Compile Include="Abstractions.fs" />
-    <Compile Include="SpanGenerators.fs" />
-    <Compile Include="Generators.fs" />
+    <Compile Include="IdentityBytesGenerators.fs" />
   </ItemGroup>
 
   <ItemGroup>

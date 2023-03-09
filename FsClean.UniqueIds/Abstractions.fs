@@ -2,10 +2,31 @@
 
 open System
 
-type ISpanGenerator =
-    abstract member CharCount : int
+type IIdentityBytesGenerator =
+    abstract Length : int
 
-    abstract member Generate : span: Span<byte> -> unit
+    abstract Generate : span: Span<byte> -> unit
 
-type IIdentifierGenerator =
-    abstract member Generate : unit -> string
+
+type ISpanDecoder =
+    abstract GetEncodedLength : inputLength: int -> int
+
+    abstract Decode : input: Span<byte> * output: Span<char> -> unit
+
+
+type IIdentityCharGenerator =
+    abstract Length : int
+
+    abstract Generate : span: Span<char> -> unit
+
+
+type IIdentityArrayGenerator =
+    abstract Length : int
+
+    abstract Generate : span: Span<char> -> unit
+
+
+type IIdentityGenerator =
+    abstract Length : int
+
+    abstract Generate : unit -> string

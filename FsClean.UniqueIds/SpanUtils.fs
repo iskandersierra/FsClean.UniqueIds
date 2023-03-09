@@ -19,7 +19,6 @@ open Microsoft.FSharp.NativeInterop
 /// <param name="size">The number of values to allocate.</param>
 /// <returns>A stack-allocated span of values of given type.</returns>
 /// <remarks>
-/// This function is intended to be performant, so it does not validate the input.
 /// Parameter size must be a positive integer that fits into the thread stack.
 /// </remarks>
 /// <see href="https://learn.microsoft.com/en-us/dotnet/fsharp/whats-new/fsharp-45#span-and-byref-like-structs"/>
@@ -555,24 +554,6 @@ module Base64 =
     let toIdentifierSafeString (source: ReadOnlySpan<byte>) =
         let vocabulary = ReadOnlySpan<_>(IdentifierSafeChars)
         toStringFromVocabulary vocabulary source
-
-[<RequireQualifiedAccess>]
-module SessionCounter =
-    let mutable private counter = -1L
-
-    let getValue () = Interlocked.Increment(&counter)
-
-    let resetValue () =
-        Interlocked.Exchange(&counter, -1L) |> ignore
-
-    let inline writeBytes (span: Span<byte>) = writeInt64Bytes (getValue ()) span
-
-[<RequireQualifiedAccess>]
-module Timestamp =
-    let inline getValue () =
-        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-
-    let inline writeBytes (span: Span<byte>) = writeInt64Bytes (getValue ()) span
 
 [<RequireQualifiedAccess>]
 module Random =
